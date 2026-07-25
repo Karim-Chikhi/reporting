@@ -1,159 +1,11 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
+import numpy as np
 import plotly.graph_objects as go
+from scipy import stats
 
-# --- CONFIGURATION DE LA PAGE ---
-st.set_page_config(page_title="Le vrai visage de l'attrition bancaire", layout="wide")
+st.set_page_config(page_title="Validation des hypothèses — BankChurners", layout="wide")
 
-# --- STYLE CSS PERSONNALISÉ (Palette Bleue) ---
-st.markdown("""
-<style>
-    [data-testid="stHeader"] { display: none; }
-    [data-testid="stDecoration"] { display: none; }
-    [data-testid="stToolbar"] { display: none; }
-
-    .stApp { background-color: #f4f7fb; }
-
-    .main .block-container,
-    [data-testid="stAppViewBlockContainer"] {
-        padding-top: 1.5rem !important;
-        padding-bottom: 2rem;
-    }
-
-    div[data-testid="stAppViewContainer"] { padding-top: 0 !important; }
-
-    h1 {
-        color: #0f172a;
-        font-family: 'Arial', sans-serif;
-        font-weight: bold !important;
-        font-size: 2.5rem !important;
-        margin-bottom: 0px !important;
-        padding-bottom: 0px !important;
-    }
-
-    .subtitle {
-        color: #64748b;
-        font-size: 1.1rem;
-        margin-top: 0px;
-        margin-bottom: 20px;
-    }
-
-    div[data-testid="stMetric"], .stPlotlyChart {
-        background-color: #ffffff;
-        border-radius: 8px;
-        border: 1px solid #dbe4f0;
-        padding: 15px;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-    }
-
-    div[data-testid="stMetric"] {
-        border-top: 4px solid #1d4ed8;
-        text-align: center;
-    }
-
-    div[data-testid="stMetricValue"] {
-        color: #1d4ed8;
-        font-size: 2.2rem !important;
-        font-weight: bold;
-    }
-
-    div[data-testid="stMetricLabel"] {
-        color: #64748b;
-        font-size: 0.9rem !important;
-        margin-bottom: 5px;
-    }
-
-    h3 {
-        color: #0f172a;
-        font-size: 1.2rem !important;
-        font-weight: 600 !important;
-        margin-top: 0px !important;
-        padding-top: 0px !important;
-        margin-bottom: 5px !important;
-    }
-
-    .chart-subtitle {
-        color: #64748b;
-        font-size: 0.85rem;
-        margin-bottom: 10px;
-    }
-
-    /* Onglets */
-    .stTabs [data-baseweb="tab-list"] { gap: 4px; }
-    .stTabs [data-baseweb="tab"] {
-        background-color: #ffffff;
-        border-radius: 8px 8px 0 0;
-        padding: 10px 18px;
-        border: 1px solid #dbe4f0;
-        border-bottom: none;
-    }
-    .stTabs [aria-selected="true"] {
-        background-color: #1d4ed8 !important;
-        color: white !important;
-    }
-
-    /* --- FILTRES --- */
-    .filters-title {
-        color: #0f172a;
-        font-size: 0.95rem;
-        font-weight: 700;
-        letter-spacing: 0.03em;
-        text-transform: uppercase;
-        margin-bottom: 8px;
-    }
-
-    /* Cadre blanc autour de chaque multiselect, comme les autres cartes */
-    div[data-testid="stMultiSelect"] {
-        background-color: #ffffff;
-        border: 1px solid #dbe4f0;
-        border-radius: 8px;
-        padding: 10px 12px 6px 12px;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-    }
-    div[data-testid="stMultiSelect"] label p {
-        color: #0f172a !important;
-        font-weight: 600 !important;
-        font-size: 0.85rem !important;
-    }
-    /* Le champ de sélection lui-même */
-    div[data-testid="stMultiSelect"] [data-baseweb="select"] > div {
-        background-color: #f8fafc;
-        border-color: #dbe4f0 !important;
-        border-radius: 6px;
-    }
-    /* Les pastilles bleues au lieu du rouge par défaut */
-    span[data-baseweb="tag"] {
-        background-color: #1d4ed8 !important;
-        border-radius: 6px !important;
-    }
-    span[data-baseweb="tag"] span {
-        color: #ffffff !important;
-    }
-    span[data-baseweb="tag"] svg {
-        fill: #ffffff !important;
-    }
-    span[data-baseweb="tag"]:hover {
-        background-color: #1e3a8a !important;
-    }
-</style>
-""", unsafe_allow_html=True)
-
-# --- PALETTE DE COULEURS ---
-COLOR_BLUE_DARK = '#1d4ed8'   # Bleu roi dominant (churners / signal fort)
-COLOR_BLUE_MID = '#3b82f6'
-COLOR_BLUE_LIGHT = '#93c5fd'  # Bleu clair (clients actifs / neutre)
-COLOR_GREY_LIGHT = '#cbd5e1'
-COLOR_GREY_TEXT = '#64748b'
-BLUE_SCALE = ['#dbeafe', '#93c5fd', '#3b82f6', '#1d4ed8', '#1e3a8a']
-
-CHART_LAYOUT = dict(
-    plot_bgcolor='white',
-    paper_bgcolor='white',
-    font=dict(color='#0f172a'),
-)
-
-# --- CHARGEMENT ET NETTOYAGE DES DONNÉES ---
 @st.cache_data
 def load_data():
     try:
@@ -166,7 +18,6 @@ def load_data():
     naive_bayes_cols = [col for col in df.columns if col.startswith('Naive_Bayes_')]
     df.drop(columns=cols_to_drop + naive_bayes_cols, inplace=True, errors='ignore')
 
-    # Tranches d'âge pour des graphes plus lisibles
     df['Age_Group'] = pd.cut(
         df['Customer_Age'],
         bins=[25, 35, 45, 55, 65, 75],
@@ -175,378 +26,586 @@ def load_data():
 
     return df
 
-df = load_data()
 
-# --- EN-TÊTE DU DASHBOARD ---
-st.markdown("<h1>Le vrai visage de l'attrition bancaire</h1>", unsafe_allow_html=True)
-st.markdown("<p class='subtitle'>Qui, quand et pourquoi les clients quittent la banque — Portfolio de Cartes de Crédit</p>", unsafe_allow_html=True)
+def lerp_color(c1, c2, t):
+    a = tuple(int(c1[i:i + 2], 16) for i in (1, 3, 5))
+    b = tuple(int(c2[i:i + 2], 16) for i in (1, 3, 5))
+    r = [round(a[j] + (b[j] - a[j]) * t) for j in range(3)]
+    return f'rgb({r[0]},{r[1]},{r[2]})'
 
-# --- FILTRES (EN HAUT) ---
-def multiselect_avec_tout(label, options, key):
-    """Multiselect avec une case 'Tout' pratique au lieu de devoir tout cocher à la main."""
-    options = list(options)
-    choix = st.multiselect(label, options=["Tout"] + options, default=["Tout"], key=key)
-    if not choix or "Tout" in choix:
-        return options
-    return choix
 
-st.markdown("<p class='filters-title'>🔍 Filtres</p>", unsafe_allow_html=True)
-filt_col1, filt_col2, filt_col3 = st.columns(3)
+ACCENT = '#E2001A'
+ACCENT_SOFT = '#FF4D5E'
+NEUTRAL_GREY = '#d9d9d9'
+NEUTRAL_GREY_DARK = '#3d3d3d'
+ED_TEXT_DARK = '#0a0a0a'
+ED_TEXT_GREY = '#595959'
 
-with filt_col1:
-    gender_filter = multiselect_avec_tout("Genre", df["Gender"].unique(), key="filter_gender")
-with filt_col2:
-    card_filter = multiselect_avec_tout("Catégorie de carte", df["Card_Category"].unique(), key="filter_card")
-with filt_col3:
-    education_filter = multiselect_avec_tout("Niveau d'éducation", df["Education_Level"].unique(), key="filter_education")
-
-df_filtered = df.query(
-    "Gender == @gender_filter & Card_Category == @card_filter & "
-    "Education_Level == @education_filter"
+EDITORIAL_CHART_LAYOUT = dict(
+    plot_bgcolor='white',
+    paper_bgcolor='white',
+    font=dict(color=ED_TEXT_DARK, family='Arial, Helvetica, sans-serif'),
 )
 
-st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
 
-# --- LIGNE 1 : KPIs GLOBAUX ---
-total_clients = len(df_filtered)
-churned_clients = len(df_filtered[df_filtered['Attrition_Flag'] == 'Attrited Customer'])
-churn_rate = (churned_clients / total_clients) * 100 if total_clients > 0 else 0
+def inject_editorial_css():
+    st.markdown("""
+    <style>
+        [data-testid="stHeader"] { display: none; }
+        [data-testid="stDecoration"] { display: none; }
+        [data-testid="stToolbar"] { display: none; }
 
-avg_relationship_active = df_filtered[df_filtered['Attrition_Flag'] == 'Existing Customer']['Total_Relationship_Count'].mean()
-avg_relationship_churn = df_filtered[df_filtered['Attrition_Flag'] == 'Attrited Customer']['Total_Relationship_Count'].mean()
+        .stApp { background-color: #0a0a0a; }
 
-avg_util_active = df_filtered[df_filtered['Attrition_Flag'] == 'Existing Customer']['Avg_Utilization_Ratio'].mean()
-avg_util_churn = df_filtered[df_filtered['Attrition_Flag'] == 'Attrited Customer']['Avg_Utilization_Ratio'].mean()
+        section[data-testid="stSidebar"] {
+            background-color: #0a0a0a;
+            border-right: 1px solid #262626;
+        }
+        section[data-testid="stSidebar"] * {
+            color: #e5e5e5 !important;
+        }
+        section[data-testid="stSidebar"] [aria-selected="true"] {
+            background-color: rgba(226,0,26,0.18) !important;
+        }
 
-avg_trans_active = df_filtered[df_filtered['Attrition_Flag'] == 'Existing Customer']['Total_Trans_Ct'].mean()
-avg_trans_churn = df_filtered[df_filtered['Attrition_Flag'] == 'Attrited Customer']['Total_Trans_Ct'].mean()
-trans_ratio = avg_trans_active / avg_trans_churn if avg_trans_churn > 0 else 0
+        .main .block-container,
+        [data-testid="stAppViewBlockContainer"] {
+            padding-top: 1.8rem !important;
+            padding-bottom: 3rem;
+            max-width: 1300px;
+        }
+        div[data-testid="stAppViewContainer"] { padding-top: 0 !important; }
 
-col1, col2, col3, col4 = st.columns(4)
-col1.metric(label="Taux d'attrition global", value=f"{churn_rate:.1f} %")
-col2.metric(label="Produits détenus (partants vs actifs)", value=f"{avg_relationship_churn:.1f} vs {avg_relationship_active:.1f}")
-col3.metric(label="Taux d'utilisation crédit (partants)", value=f"{avg_util_churn*100:.1f} %", delta=f"{(avg_util_churn-avg_util_active)*100:.1f} pts vs actifs", delta_color="inverse")
-col4.metric(label="Fois plus de transactions chez les actifs", value=f"x {trans_ratio:.1f}")
+        h1.ed-title {
+            color: #ffffff;
+            font-family: -apple-system, 'Helvetica Neue', Arial, sans-serif;
+            font-weight: 800 !important;
+            font-size: 2.4rem !important;
+            letter-spacing: -0.01em;
+            margin: 0 0 2px 0 !important;
+        }
+        .ed-subtitle {
+            color: #b3b3b3;
+            font-size: 1rem;
+            margin: 0 0 18px 0;
+        }
+        .ed-meta {
+            color: #808080;
+            font-size: 0.78rem;
+            text-align: right;
+            margin-top: 6px;
+        }
+        .ed-rule {
+            height: 4px;
+            background-color: #E2001A;
+            border-radius: 2px;
+            margin: 4px 0 18px 0;
+        }
+        .ed-divider {
+            height: 1px;
+            background-color: #262626;
+            margin: 8px 0 26px 0;
+        }
 
-st.markdown("<br>", unsafe_allow_html=True)
+        .kpi-card {
+            background-color: #ffffff;
+            border: 1px solid #e7e5e4;
+            border-top: 3px solid #E2001A;
+            border-radius: 8px;
+            padding: 18px 14px;
+            text-align: center;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.03), 0 6px 16px rgba(17,24,39,0.04);
+        }
+        .kpi-value {
+            color: #E2001A;
+            font-size: 1.9rem;
+            font-weight: 800;
+            line-height: 1.2;
+        }
+        .kpi-caption {
+            color: #6b7280;
+            font-size: 0.85rem;
+            margin-top: 6px;
+        }
 
-# --- ONGLETS THÉMATIQUES ---
-tab1, tab2, tab3, tab4 = st.tabs([
-    "📊 Vue d'ensemble",
-    "👤 Profil client",
-    "💳 Comportement financier",
-    "🤝 Relation & engagement"
-])
+        div[class*="st-key-edcard_"] {
+            background-color: #ffffff;
+            border: 1px solid #e7e5e4;
+            border-radius: 12px;
+            padding: 20px 22px 14px 22px;
+            margin-bottom: 8px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.03), 0 8px 20px rgba(17,24,39,0.045);
+        }
+        .ed-kicker {
+            color: #E2001A;
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+        .ed-statement {
+            color: #6b7280;
+            font-size: 0.88rem;
+            font-style: italic;
+            margin-bottom: 16px;
+        }
+        .ed-card-title {
+            color: #111827;
+            font-size: 1.08rem;
+            font-weight: 700;
+            line-height: 1.3;
+            margin-bottom: 2px;
+        }
+        .ed-card-title::before {
+            content: '';
+            display: inline-block;
+            width: 14px;
+            height: 3px;
+            border-radius: 2px;
+            background-color: #E2001A;
+            margin-right: 8px;
+            margin-bottom: 3px;
+        }
+        .ed-card-subtitle {
+            color: #6b7280;
+            font-size: 0.8rem;
+            margin-bottom: 6px;
+        }
+        .ed-verdict {
+            color: #b3b3b3;
+            font-size: 0.85rem;
+            padding: 4px 2px 22px 2px;
+        }
+        .ed-verdict b { color: #ffffff; }
+        .ed-verdict .accent { color: #E2001A; }
+    </style>
+    """, unsafe_allow_html=True)
 
-# ==================================================================
-# TAB 1 : VUE D'ENSEMBLE
-# ==================================================================
-with tab1:
-    top_col1, top_col2 = st.columns([1.3, 1])
 
-    with top_col1:
-        st.markdown("<h3>La chute des transactions, signal d'alarme</h3>", unsafe_allow_html=True)
-        st.markdown("<p class='chart-subtitle'>Montant total vs Nombre total de transactions</p>", unsafe_allow_html=True)
-
-        fig_scatter = px.scatter(
-            df_filtered,
-            x="Total_Trans_Ct",
-            y="Total_Trans_Amt",
-            color="Attrition_Flag",
-            opacity=0.65,
-            color_discrete_map={'Existing Customer': COLOR_BLUE_LIGHT, 'Attrited Customer': COLOR_BLUE_DARK},
-            labels={"Total_Trans_Ct": "Nombre de transactions", "Total_Trans_Amt": "Montant des transactions ($)", "Attrition_Flag": "Statut"}
-        )
-        fig_scatter.update_layout(**CHART_LAYOUT, margin=dict(l=0, r=0, t=10, b=0),
-                                   legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, title=None))
-        fig_scatter.add_annotation(x=30, y=8500, text="Zone de haut risque", showarrow=False, font=dict(color=COLOR_BLUE_DARK, size=13))
-        st.plotly_chart(fig_scatter, use_container_width=True, config={'displayModeBar': False})
-
-    with top_col2:
-        st.markdown("<h3>L'attrition frappe surtout entre 46 et 55 ans</h3>", unsafe_allow_html=True)
-        st.markdown("<p class='chart-subtitle'>Taux d'attrition par tranche d'âge</p>", unsafe_allow_html=True)
-
-        churn_by_age = df_filtered.groupby('Age_Group', observed=True)['Attrition_Flag'].apply(
-            lambda x: (x == 'Attrited Customer').mean() * 100
-        ).reset_index()
-        churn_by_age.columns = ['Tranche', 'Taux']
-
-        fig_age = px.bar(
-            churn_by_age, x='Tranche', y='Taux',
-            text=churn_by_age['Taux'].apply(lambda x: f"{x:.1f}%"),
-            color='Taux', color_continuous_scale=BLUE_SCALE
-        )
-        fig_age.update_traces(textposition='outside')
-        fig_age.update_layout(**CHART_LAYOUT, margin=dict(l=0, r=0, t=10, b=0),
-                               xaxis_title=None, yaxis_title=None,
-                               yaxis=dict(showticklabels=False, showgrid=False),
-                               coloraxis_showscale=False, height=310)
-        st.plotly_chart(fig_age, use_container_width=True, config={'displayModeBar': False})
-
-    st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown("<h3>Répartition des clients par statut</h3>", unsafe_allow_html=True)
-    st.markdown("<p class='chart-subtitle'>Vue globale du portefeuille filtré</p>", unsafe_allow_html=True)
-
-    status_counts = df_filtered['Attrition_Flag'].value_counts().reset_index()
-    status_counts.columns = ['Statut', 'Nombre']
-    status_counts['Statut'] = status_counts['Statut'].replace({'Existing Customer': 'Client actif', 'Attrited Customer': 'Client parti'})
-
-    fig_donut = px.pie(
-        status_counts, names='Statut', values='Nombre', hole=0.6,
-        color='Statut', color_discrete_map={'Client actif': COLOR_BLUE_LIGHT, 'Client parti': COLOR_BLUE_DARK}
+def bar2(labels, values, highlight_first, value_fmt="{:,.0f}", height=260):
+    colors = [ACCENT if highlight_first else NEUTRAL_GREY,
+              NEUTRAL_GREY if highlight_first else ACCENT]
+    fig = go.Figure(go.Bar(
+        x=labels, y=values, marker_color=colors, width=0.48,
+        marker_line=dict(width=0),
+        text=[value_fmt.format(v) for v in values],
+        textposition='outside',
+        textfont=dict(size=17, color=ED_TEXT_DARK),
+    ))
+    y_max = max(values) * 1.32
+    fig.update_layout(
+        **EDITORIAL_CHART_LAYOUT,
+        margin=dict(l=0, r=0, t=10, b=0), height=height, showlegend=False,
+        xaxis=dict(showgrid=False, showline=False, tickfont=dict(size=13, color=ED_TEXT_GREY)),
+        yaxis=dict(showgrid=False, showticklabels=False, zeroline=False, range=[0, y_max]),
     )
-    fig_donut.update_traces(textinfo='percent+label')
-    fig_donut.update_layout(**CHART_LAYOUT, margin=dict(l=0, r=0, t=10, b=0), showlegend=False, height=300)
-    st.plotly_chart(fig_donut, use_container_width=True, config={'displayModeBar': False})
+    return fig
 
-# ==================================================================
-# TAB 2 : PROFIL CLIENT (Gender, Education, Marital, Income, Dependents)
-# ==================================================================
-with tab2:
-    p_col1, p_col2 = st.columns(2)
 
-    with p_col1:
-        st.markdown("<h3>Le churn frappe plus les femmes</h3>", unsafe_allow_html=True)
-        st.markdown("<p class='chart-subtitle'>Taux d'attrition selon le genre</p>", unsafe_allow_html=True)
-
-        churn_by_gender = df_filtered.groupby('Gender')['Attrition_Flag'].apply(lambda x: (x == 'Attrited Customer').mean() * 100).reset_index()
-        churn_by_gender.columns = ['Gender', 'Taux']
-        churn_by_gender['Gender'] = churn_by_gender['Gender'].replace({'F': 'Femme', 'M': 'Homme'})
-
-        fig_gender = px.bar(
-            churn_by_gender, x='Gender', y='Taux',
-            text=churn_by_gender['Taux'].apply(lambda x: f"{x:.1f}%"),
-            color='Taux', color_continuous_scale=BLUE_SCALE
-        )
-        fig_gender.update_traces(textposition='outside')
-        fig_gender.update_layout(**CHART_LAYOUT, margin=dict(l=0, r=0, t=10, b=0),
-                                  xaxis_title=None, yaxis_title=None,
-                                  yaxis=dict(showticklabels=False, showgrid=False),
-                                  coloraxis_showscale=False, height=280)
-        st.plotly_chart(fig_gender, use_container_width=True, config={'displayModeBar': False})
-
-        st.markdown("<h3>Le statut marital influence peu le départ</h3>", unsafe_allow_html=True)
-        st.markdown("<p class='chart-subtitle'>Taux d'attrition selon la situation familiale</p>", unsafe_allow_html=True)
-
-        churn_by_marital = df_filtered.groupby('Marital_Status')['Attrition_Flag'].apply(lambda x: (x == 'Attrited Customer').mean() * 100).reset_index()
-        churn_by_marital.columns = ['Statut', 'Taux']
-        churn_by_marital = churn_by_marital.sort_values('Taux', ascending=True)
-
-        fig_marital = px.bar(
-            churn_by_marital, x='Taux', y='Statut', orientation='h',
-            text=churn_by_marital['Taux'].apply(lambda x: f"{x:.1f}%"),
-            color='Taux', color_continuous_scale=BLUE_SCALE
-        )
-        fig_marital.update_traces(textposition='outside')
-        fig_marital.update_layout(**CHART_LAYOUT, margin=dict(l=0, r=20, t=10, b=0),
-                                   xaxis=dict(showticklabels=False, showgrid=False, title=None),
-                                   yaxis_title=None, coloraxis_showscale=False, height=280)
-        st.plotly_chart(fig_marital, use_container_width=True, config={'displayModeBar': False})
-
-    with p_col2:
-        st.markdown("<h3>Les hauts revenus résistent mieux</h3>", unsafe_allow_html=True)
-        st.markdown("<p class='chart-subtitle'>Taux d'attrition selon la tranche de revenu</p>", unsafe_allow_html=True)
-
-        income_order = ['Less than $40K', '$40K - $60K', '$60K - $80K', '$80K - $120K', '$120K +', 'Unknown']
-        churn_by_income = df_filtered.groupby('Income_Category')['Attrition_Flag'].apply(lambda x: (x == 'Attrited Customer').mean() * 100).reset_index()
-        churn_by_income.columns = ['Revenu', 'Taux']
-        churn_by_income['Revenu'] = pd.Categorical(churn_by_income['Revenu'], categories=[c for c in income_order if c in churn_by_income['Revenu'].values], ordered=True)
-        churn_by_income = churn_by_income.sort_values('Revenu')
-
-        fig_income = px.bar(
-            churn_by_income, x='Revenu', y='Taux',
-            text=churn_by_income['Taux'].apply(lambda x: f"{x:.1f}%"),
-            color='Taux', color_continuous_scale=BLUE_SCALE
-        )
-        fig_income.update_traces(textposition='outside')
-        fig_income.update_layout(**CHART_LAYOUT, margin=dict(l=0, r=0, t=10, b=0),
-                                  xaxis_title=None, yaxis_title=None,
-                                  yaxis=dict(showticklabels=False, showgrid=False),
-                                  coloraxis_showscale=False, height=280)
-        st.plotly_chart(fig_income, use_container_width=True, config={'displayModeBar': False})
-
-        st.markdown("<h3>Le niveau d'éducation a peu d'impact</h3>", unsafe_allow_html=True)
-        st.markdown("<p class='chart-subtitle'>Taux d'attrition selon le niveau d'études</p>", unsafe_allow_html=True)
-
-        churn_by_edu = df_filtered.groupby('Education_Level')['Attrition_Flag'].apply(lambda x: (x == 'Attrited Customer').mean() * 100).reset_index()
-        churn_by_edu.columns = ['Niveau', 'Taux']
-        churn_by_edu = churn_by_edu.sort_values('Taux', ascending=True)
-
-        fig_edu = px.bar(
-            churn_by_edu, x='Taux', y='Niveau', orientation='h',
-            text=churn_by_edu['Taux'].apply(lambda x: f"{x:.1f}%"),
-            color='Taux', color_continuous_scale=BLUE_SCALE
-        )
-        fig_edu.update_traces(textposition='outside')
-        fig_edu.update_layout(**CHART_LAYOUT, margin=dict(l=0, r=20, t=10, b=0),
-                               xaxis=dict(showticklabels=False, showgrid=False, title=None),
-                               yaxis_title=None, coloraxis_showscale=False, height=280)
-        st.plotly_chart(fig_edu, use_container_width=True, config={'displayModeBar': False})
-
-    st.markdown("<h3>Les foyers avec plus d'enfants partent-ils davantage ?</h3>", unsafe_allow_html=True)
-    st.markdown("<p class='chart-subtitle'>Taux d'attrition selon le nombre de personnes à charge</p>", unsafe_allow_html=True)
-
-    churn_by_dep = df_filtered.groupby('Dependent_count')['Attrition_Flag'].apply(lambda x: (x == 'Attrited Customer').mean() * 100).reset_index()
-    churn_by_dep.columns = ['Personnes à charge', 'Taux']
-
-    fig_dep = px.line(
-        churn_by_dep, x='Personnes à charge', y='Taux', markers=True,
-        text=churn_by_dep['Taux'].apply(lambda x: f"{x:.1f}%")
+def hbar2(labels, values, highlight_first, value_fmt="{:,.0f}", height=230):
+    colors = [ACCENT if highlight_first else NEUTRAL_GREY,
+              NEUTRAL_GREY if highlight_first else ACCENT]
+    fig = go.Figure(go.Bar(
+        y=labels, x=values, orientation='h', marker_color=colors, width=0.55,
+        marker_line=dict(width=0),
+        text=[value_fmt.format(v) for v in values],
+        textposition='outside',
+        textfont=dict(size=18, color=ED_TEXT_DARK),
+    ))
+    fig.update_layout(
+        **EDITORIAL_CHART_LAYOUT,
+        margin=dict(l=0, r=60, t=10, b=0), height=height, showlegend=False,
+        yaxis=dict(showgrid=False, tickfont=dict(size=15, color=ED_TEXT_DARK)),
+        xaxis=dict(showgrid=False, showticklabels=False, zeroline=False, range=[0, max(values) * 1.3]),
     )
-    fig_dep.update_traces(line_color=COLOR_BLUE_DARK, marker=dict(size=10, color=COLOR_BLUE_DARK), textposition='top center')
-    fig_dep.update_layout(**CHART_LAYOUT, margin=dict(l=0, r=0, t=10, b=0),
-                           yaxis_title="Taux d'attrition (%)", xaxis_title="Nombre de personnes à charge", height=280)
-    st.plotly_chart(fig_dep, use_container_width=True, config={'displayModeBar': False})
+    return fig
 
-# ==================================================================
-# TAB 3 : COMPORTEMENT FINANCIER
-# ==================================================================
-with tab3:
-    f_col1, f_col2 = st.columns(2)
 
-    with f_col1:
-        st.markdown("<h3>Les partants n'utilisent presque plus leur crédit</h3>", unsafe_allow_html=True)
-        st.markdown("<p class='chart-subtitle'>Distribution du taux d'utilisation du crédit</p>", unsafe_allow_html=True)
+def dumbbell(label_a, val_a, label_b, val_b, value_fmt="{:.1f}", height=220):
+    a_wins = val_a >= val_b
+    color_a = ACCENT if a_wins else NEUTRAL_GREY_DARK
+    color_b = NEUTRAL_GREY_DARK if a_wins else ACCENT
+    span = abs(val_a - val_b) or max(val_a, val_b) * 0.1 or 1
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=[val_a, val_b], y=[0, 0], mode='lines',
+        line=dict(color='#d8d3ce', width=3), showlegend=False, hoverinfo='skip',
+    ))
+    fig.add_trace(go.Scatter(
+        x=[val_a], y=[0], mode='markers+text',
+        marker=dict(size=24, color=color_a, line=dict(width=3, color='white')),
+        text=[f"<b>{label_a}</b><br>{value_fmt.format(val_a)}"], textposition='top center',
+        textfont=dict(size=14, color=ED_TEXT_DARK), showlegend=False,
+    ))
+    fig.add_trace(go.Scatter(
+        x=[val_b], y=[0], mode='markers+text',
+        marker=dict(size=24, color=color_b, line=dict(width=3, color='white')),
+        text=[f"<b>{label_b}</b><br>{value_fmt.format(val_b)}"], textposition='bottom center',
+        textfont=dict(size=14, color=ED_TEXT_DARK), showlegend=False,
+    ))
+    fig.update_layout(
+        **EDITORIAL_CHART_LAYOUT,
+        margin=dict(l=50, r=50, t=45, b=45), height=height, showlegend=False,
+        xaxis=dict(showgrid=False, showticklabels=False, zeroline=False,
+                    range=[min(val_a, val_b) - span * 0.9, max(val_a, val_b) + span * 0.9]),
+        yaxis=dict(showgrid=False, showticklabels=False, zeroline=False, range=[-1, 1]),
+    )
+    return fig
 
-        fig_util = px.box(
-            df_filtered, x='Attrition_Flag', y='Avg_Utilization_Ratio', color='Attrition_Flag',
-            color_discrete_map={'Existing Customer': COLOR_BLUE_LIGHT, 'Attrited Customer': COLOR_BLUE_DARK},
-            labels={'Attrition_Flag': 'Statut', 'Avg_Utilization_Ratio': "Taux d'utilisation"}
-        )
-        fig_util.update_layout(**CHART_LAYOUT, margin=dict(l=0, r=0, t=10, b=0), showlegend=False, height=320)
-        st.plotly_chart(fig_util, use_container_width=True, config={'displayModeBar': False})
 
-        st.markdown("<h3>La baisse d'activité précède le départ</h3>", unsafe_allow_html=True)
-        st.markdown("<p class='chart-subtitle'>Changement du montant de transactions (Q4 vs Q1)</p>", unsafe_allow_html=True)
+def age_strip(series_a, series_b, name_a, name_b, y_title, height=340, sample_size=280):
+    rng = np.random.default_rng(42)
 
-        avg_chng_active = df_filtered[df_filtered['Attrition_Flag'] == 'Existing Customer']['Total_Amt_Chng_Q4_Q1'].mean()
-        avg_chng_churn = df_filtered[df_filtered['Attrition_Flag'] == 'Attrited Customer']['Total_Amt_Chng_Q4_Q1'].mean()
-        avg_ct_chng_active = df_filtered[df_filtered['Attrition_Flag'] == 'Existing Customer']['Total_Ct_Chng_Q4_Q1'].mean()
-        avg_ct_chng_churn = df_filtered[df_filtered['Attrition_Flag'] == 'Attrited Customer']['Total_Ct_Chng_Q4_Q1'].mean()
+    def sample(s):
+        arr = s.to_numpy()
+        if len(arr) > sample_size:
+            idx = rng.choice(len(arr), sample_size, replace=False)
+            return arr[idx]
+        return arr
 
-        df_chng = pd.DataFrame({
-            'Statut': ['Actif', 'Partant', 'Actif', 'Partant'],
-            'Indicateur': ['Montant', 'Montant', 'Nb. transactions', 'Nb. transactions'],
-            'Changement': [avg_chng_active, avg_chng_churn, avg_ct_chng_active, avg_ct_chng_churn]
-        })
+    vals_a, vals_b = sample(series_a), sample(series_b)
+    jitter_a = rng.uniform(-0.18, 0.18, size=len(vals_a))
+    jitter_b = rng.uniform(-0.18, 0.18, size=len(vals_b))
 
-        fig_chng = px.bar(
-            df_chng, x='Indicateur', y='Changement', color='Statut', barmode='group',
-            text=df_chng['Changement'].apply(lambda x: f"{x:.2f}"),
-            color_discrete_map={'Partant': COLOR_BLUE_DARK, 'Actif': COLOR_BLUE_LIGHT}
-        )
-        fig_chng.update_traces(textposition='outside')
-        fig_chng.update_layout(**CHART_LAYOUT, margin=dict(l=0, r=0, t=10, b=0),
-                                xaxis_title=None, yaxis_title="Variation Q4/Q1", height=280,
-                                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, title=None))
-        st.plotly_chart(fig_chng, use_container_width=True, config={'displayModeBar': False})
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=jitter_b, y=vals_b, mode='markers',
+        marker=dict(size=6, color=NEUTRAL_GREY_DARK, opacity=0.45),
+        showlegend=False, hoverinfo='skip',
+    ))
+    fig.add_trace(go.Scatter(
+        x=1 + jitter_a, y=vals_a, mode='markers',
+        marker=dict(size=6, color=ACCENT, opacity=0.45),
+        showlegend=False, hoverinfo='skip',
+    ))
+    fig.add_trace(go.Scatter(
+        x=[0], y=[series_b.mean()], mode='markers+text',
+        marker=dict(size=16, color=NEUTRAL_GREY_DARK, symbol='diamond', line=dict(width=2, color='white')),
+        text=[f"{series_b.mean():.1f}"], textposition='top center',
+        textfont=dict(size=13, color=ED_TEXT_DARK), showlegend=False,
+    ))
+    fig.add_trace(go.Scatter(
+        x=[1], y=[series_a.mean()], mode='markers+text',
+        marker=dict(size=16, color=ACCENT, symbol='diamond', line=dict(width=2, color='white')),
+        text=[f"{series_a.mean():.1f}"], textposition='top center',
+        textfont=dict(size=13, color=ED_TEXT_DARK), showlegend=False,
+    ))
+    fig.update_layout(
+        **EDITORIAL_CHART_LAYOUT,
+        margin=dict(l=0, r=0, t=30, b=0), height=height, showlegend=False,
+        xaxis=dict(showgrid=False, tickvals=[0, 1], ticktext=[name_b, name_a], range=[-0.5, 1.5],
+                    tickfont=dict(size=14, color=ED_TEXT_DARK), zeroline=False),
+        yaxis=dict(showgrid=False, title=y_title, tickfont=dict(size=13, color=ED_TEXT_GREY)),
+    )
+    return fig
 
-    with f_col2:
-        st.markdown("<h3>Plafond de crédit vs solde renouvelable</h3>", unsafe_allow_html=True)
-        st.markdown("<p class='chart-subtitle'>Les partants gardent un solde revolving quasi nul</p>", unsafe_allow_html=True)
 
-        fig_credit = px.scatter(
-            df_filtered, x='Credit_Limit', y='Total_Revolving_Bal', color='Attrition_Flag',
-            opacity=0.6,
-            color_discrete_map={'Existing Customer': COLOR_BLUE_LIGHT, 'Attrited Customer': COLOR_BLUE_DARK},
-            labels={'Credit_Limit': 'Plafond de crédit ($)', 'Total_Revolving_Bal': 'Solde renouvelable ($)', 'Attrition_Flag': 'Statut'}
-        )
-        fig_credit.update_layout(**CHART_LAYOUT, margin=dict(l=0, r=0, t=10, b=0), height=320,
-                                  legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, title=None))
-        st.plotly_chart(fig_credit, use_container_width=True, config={'displayModeBar': False})
+def signal_line(x_vals, y_vals, value_fmt="{:.1f}%", height=250):
+    fig = go.Figure(go.Scatter(
+        x=x_vals, y=y_vals, mode='lines+markers+text',
+        line=dict(color=ACCENT, width=3),
+        marker=dict(size=10, color=ACCENT),
+        text=[value_fmt.format(v) for v in y_vals], textposition='top center',
+        textfont=dict(size=13, color=ED_TEXT_DARK),
+        cliponaxis=False,
+    ))
+    fig.update_layout(
+        **EDITORIAL_CHART_LAYOUT,
+        margin=dict(l=0, r=10, t=35, b=0), height=height, showlegend=False,
+        xaxis=dict(showgrid=False, tickfont=dict(size=13, color=ED_TEXT_GREY), title=None),
+        yaxis=dict(showgrid=False, showticklabels=False, zeroline=False, range=[0, max(y_vals) * 1.35]),
+    )
+    return fig
 
-        st.markdown("<h3>Crédit disponible non utilisé</h3>", unsafe_allow_html=True)
-        st.markdown("<p class='chart-subtitle'>Moyenne du crédit disponible (Avg Open To Buy)</p>", unsafe_allow_html=True)
 
-        avg_open_active = df_filtered[df_filtered['Attrition_Flag'] == 'Existing Customer']['Avg_Open_To_Buy'].mean()
-        avg_open_churn = df_filtered[df_filtered['Attrition_Flag'] == 'Attrited Customer']['Avg_Open_To_Buy'].mean()
-        df_open = pd.DataFrame({'Statut': ['Actif', 'Partant'], 'Crédit disponible': [avg_open_active, avg_open_churn]})
-
-        fig_open = px.bar(
-            df_open, x='Statut', y='Crédit disponible',
-            text=df_open['Crédit disponible'].apply(lambda x: f"${x:,.0f}"),
-            color='Statut', color_discrete_map={'Partant': COLOR_BLUE_DARK, 'Actif': COLOR_BLUE_LIGHT}
-        )
-        fig_open.update_traces(textposition='outside')
-        fig_open.update_layout(**CHART_LAYOUT, margin=dict(l=0, r=0, t=10, b=0),
-                                xaxis_title=None, yaxis_title=None,
-                                yaxis=dict(showticklabels=False, showgrid=False),
-                                showlegend=False, height=280)
-        st.plotly_chart(fig_open, use_container_width=True, config={'displayModeBar': False})
-
-# ==================================================================
-# TAB 4 : RELATION & ENGAGEMENT
-# ==================================================================
-with tab4:
-    r_col1, r_col2 = st.columns(2)
-
-    with r_col1:
-        st.markdown("<h3>Moins de produits, plus de risque de départ</h3>", unsafe_allow_html=True)
-        st.markdown("<p class='chart-subtitle'>Taux d'attrition selon le nombre de produits détenus</p>", unsafe_allow_html=True)
-
-        churn_by_rel = df_filtered.groupby('Total_Relationship_Count')['Attrition_Flag'].apply(lambda x: (x == 'Attrited Customer').mean() * 100).reset_index()
-        churn_by_rel.columns = ['Produits', 'Taux']
-
-        fig_rel = px.bar(
-            churn_by_rel, x='Produits', y='Taux',
-            text=churn_by_rel['Taux'].apply(lambda x: f"{x:.1f}%"),
-            color='Taux', color_continuous_scale=BLUE_SCALE
-        )
-        fig_rel.update_traces(textposition='outside')
-        fig_rel.update_layout(**CHART_LAYOUT, margin=dict(l=0, r=0, t=10, b=0),
-                               xaxis_title="Nombre de produits", yaxis_title=None,
-                               yaxis=dict(showticklabels=False, showgrid=False),
-                               coloraxis_showscale=False, height=300)
-        st.plotly_chart(fig_rel, use_container_width=True, config={'displayModeBar': False})
-
-        st.markdown("<h3>L'ancienneté ne protège pas du départ</h3>", unsafe_allow_html=True)
-        st.markdown("<p class='chart-subtitle'>Ancienneté moyenne (mois) selon le statut</p>", unsafe_allow_html=True)
-
-        avg_tenure_active = df_filtered[df_filtered['Attrition_Flag'] == 'Existing Customer']['Months_on_book'].mean()
-        avg_tenure_churn = df_filtered[df_filtered['Attrition_Flag'] == 'Attrited Customer']['Months_on_book'].mean()
-        df_tenure = pd.DataFrame({'Statut': ['Actif', 'Partant'], 'Ancienneté': [avg_tenure_active, avg_tenure_churn]})
-
-        fig_tenure = px.bar(
-            df_tenure, x='Statut', y='Ancienneté',
-            text=df_tenure['Ancienneté'].apply(lambda x: f"{x:.1f} mois"),
-            color='Statut', color_discrete_map={'Partant': COLOR_BLUE_DARK, 'Actif': COLOR_BLUE_LIGHT}
-        )
-        fig_tenure.update_traces(textposition='outside')
-        fig_tenure.update_layout(**CHART_LAYOUT, margin=dict(l=0, r=0, t=10, b=0),
-                                  xaxis_title=None, yaxis_title=None,
-                                  yaxis=dict(showticklabels=False, showgrid=False),
-                                  showlegend=False, height=280)
-        st.plotly_chart(fig_tenure, use_container_width=True, config={'displayModeBar': False})
-
-    with r_col2:
-        st.markdown("<h3>Plus ils contactent, plus ils partent</h3>", unsafe_allow_html=True)
-        st.markdown("<p class='chart-subtitle'>Taux d'attrition selon le nombre de contacts (12 mois)</p>", unsafe_allow_html=True)
-
-        churn_by_contact = df_filtered.groupby('Contacts_Count_12_mon')['Attrition_Flag'].apply(lambda x: (x == 'Attrited Customer').mean() * 100).reset_index()
-        churn_by_contact.columns = ['Contacts', 'Taux']
-
-        fig_contact = go.Figure()
-        colors = [COLOR_BLUE_DARK if c >= 3 else COLOR_BLUE_LIGHT for c in churn_by_contact['Contacts']]
-        fig_contact.add_trace(go.Bar(
-            x=churn_by_contact['Taux'], y=churn_by_contact['Contacts'].astype(str), orientation='h',
-            marker_color=colors, text=churn_by_contact['Taux'].apply(lambda x: f"{x:.1f}%"), textposition='outside'
+def ranked_lollipop(categories, values, value_fmt="{:.1f}%", height=300):
+    order = list(categories)[::-1]
+    vals = list(values)[::-1]
+    n = len(vals)
+    ranks = sorted(range(n), key=lambda i: vals[i])
+    rank_of = {i: r for r, i in enumerate(ranks)}
+    colors = [lerp_color('#e0e0e0', ACCENT, rank_of[i] / max(1, n - 1)) for i in range(n)]
+    sizes = [12 + 8 * (rank_of[i] / max(1, n - 1)) for i in range(n)]
+    fig = go.Figure()
+    for cat, val in zip(order, vals):
+        fig.add_trace(go.Scatter(
+            x=[0, val], y=[cat, cat], mode='lines',
+            line=dict(color='#e7e5e4', width=2), showlegend=False, hoverinfo='skip',
         ))
-        fig_contact.update_layout(**CHART_LAYOUT, margin=dict(l=0, r=20, t=10, b=0),
-                                   xaxis=dict(showticklabels=False, showgrid=False, title=None),
-                                   yaxis=dict(title="Nb de contacts", categoryorder='category descending'), height=300)
-        st.plotly_chart(fig_contact, use_container_width=True, config={'displayModeBar': False})
+    fig.add_trace(go.Scatter(
+        x=vals, y=order, mode='markers+text',
+        marker=dict(size=sizes, color=colors, line=dict(width=2, color='white')),
+        text=[value_fmt.format(v) for v in vals],
+        textposition='middle right',
+        textfont=dict(size=13, color=ED_TEXT_DARK),
+        showlegend=False,
+    ))
+    fig.update_layout(
+        **EDITORIAL_CHART_LAYOUT,
+        margin=dict(l=0, r=40, t=10, b=0), height=height,
+        xaxis=dict(showgrid=False, showticklabels=False, zeroline=False, range=[0, max(vals) * 1.35]),
+        yaxis=dict(showgrid=False, tickfont=dict(size=13, color=ED_TEXT_DARK)),
+    )
+    return fig
 
-        st.markdown("<h3>L'inactivité, un signal précoce du départ</h3>", unsafe_allow_html=True)
-        st.markdown("<p class='chart-subtitle'>Taux d'attrition selon les mois d'inactivité (12 mois)</p>", unsafe_allow_html=True)
 
-        churn_by_inactive = df_filtered.groupby('Months_Inactive_12_mon')['Attrition_Flag'].apply(lambda x: (x == 'Attrited Customer').mean() * 100).reset_index()
-        churn_by_inactive.columns = ['Mois inactifs', 'Taux']
+def contact_hbar(categories, values, threshold=3, value_fmt="{:.1f}%", height=320):
+    colors = [ACCENT if c >= threshold else NEUTRAL_GREY for c in categories]
+    order = sorted(categories, reverse=True)
+    fig = go.Figure(go.Bar(
+        y=[str(c) for c in categories], x=values, orientation='h',
+        marker_color=colors, width=0.6,
+        text=[value_fmt.format(v) for v in values], textposition='outside',
+        textfont=dict(size=13, color=ED_TEXT_DARK),
+    ))
+    fig.update_layout(
+        **EDITORIAL_CHART_LAYOUT,
+        margin=dict(l=0, r=40, t=10, b=0), height=height, showlegend=False,
+        xaxis=dict(showgrid=False, showticklabels=False, zeroline=False, range=[0, max(values) * 1.3]),
+        yaxis=dict(showgrid=False, tickfont=dict(size=13, color=ED_TEXT_DARK),
+                    categoryorder='array', categoryarray=[str(c) for c in order]),
+    )
+    return fig
 
-        fig_inactive = px.line(
-            churn_by_inactive, x='Mois inactifs', y='Taux', markers=True,
-            text=churn_by_inactive['Taux'].apply(lambda x: f"{x:.1f}%")
+
+def predictor_hbar(labels, values, height=340):
+    order = sorted(range(len(values)), key=lambda i: values[i], reverse=True)
+    labels_sorted = [labels[i] for i in order]
+    values_sorted = [values[i] for i in order]
+    fig = go.Figure(go.Bar(
+        y=labels_sorted, x=values_sorted, orientation='h',
+        marker_color=ACCENT, width=0.6,
+    ))
+    fig.update_layout(
+        **EDITORIAL_CHART_LAYOUT,
+        margin=dict(l=0, r=10, t=10, b=0), height=height, showlegend=False,
+        xaxis=dict(showgrid=False, showticklabels=False, zeroline=False, range=[0, max(values_sorted) * 1.1]),
+        yaxis=dict(showgrid=False, tickfont=dict(size=13, color=ED_TEXT_DARK),
+                    categoryorder='array', categoryarray=list(reversed(labels_sorted))),
+    )
+    return fig
+
+
+def density_curve(series_a, series_b, name_a, name_b, x_title, height=340):
+    lo = min(series_a.min(), series_b.min())
+    hi = max(series_a.max(), series_b.max())
+    xs = np.linspace(lo, hi, 200)
+    kde_a = stats.gaussian_kde(series_a)(xs)
+    kde_b = stats.gaussian_kde(series_b)(xs)
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=xs, y=kde_b, mode='lines', name=name_b,
+        line=dict(color=NEUTRAL_GREY_DARK, width=2),
+        fill='tozeroy', fillcolor='rgba(61,61,61,0.15)',
+    ))
+    fig.add_trace(go.Scatter(
+        x=xs, y=kde_a, mode='lines', name=name_a,
+        line=dict(color=ACCENT, width=2.5),
+        fill='tozeroy', fillcolor='rgba(226,0,26,0.20)',
+    ))
+    fig.update_layout(
+        **EDITORIAL_CHART_LAYOUT,
+        margin=dict(l=0, r=0, t=10, b=0), height=height,
+        legend=dict(orientation='h', yanchor='bottom', y=1.03, xanchor='left', x=0, font=dict(size=13, color=ED_TEXT_GREY)),
+        xaxis=dict(showgrid=False, title=x_title, tickfont=dict(size=13, color=ED_TEXT_GREY), zeroline=False),
+        yaxis=dict(showgrid=False, showticklabels=False, title=None, zeroline=False),
+    )
+    return fig
+
+
+_card_counter = {"n": 0}
+
+
+def card(kicker="", statement=""):
+    _card_counter["n"] += 1
+    box = st.container(key=f"edcard_{_card_counter['n']}")
+    with box:
+        if kicker or statement:
+            parts = []
+            if kicker:
+                parts.append(f"<p class='ed-kicker'>{kicker}</p>")
+            if statement:
+                parts.append(f"<p class='ed-statement'>{statement}</p>")
+            st.markdown("".join(parts), unsafe_allow_html=True)
+    return box
+
+
+def card_chart_header(title, subtitle):
+    st.markdown(
+        f"<p class='ed-card-title'>{title}</p><p class='ed-card-subtitle'>{subtitle}</p>",
+        unsafe_allow_html=True,
+    )
+
+
+def kpi_card(value, caption):
+    st.markdown(
+        f"<div class='kpi-card'><div class='kpi-value'>{value}</div>"
+        f"<div class='kpi-caption'>{caption}</div></div>",
+        unsafe_allow_html=True,
+    )
+
+
+def render_hypotheses(df):
+    inject_editorial_css()
+
+    head_col, meta_col = st.columns([3, 1])
+    with head_col:
+        st.markdown("<h1 class='ed-title'>Le vrai visage des hypothèses</h1>", unsafe_allow_html=True)
+        st.markdown(
+            "<p class='ed-subtitle'>Genre, inactivité et âge — ce que les données du portefeuille cartes de crédit confirment vraiment</p>",
+            unsafe_allow_html=True,
         )
-        fig_inactive.update_traces(line_color=COLOR_BLUE_DARK, marker=dict(size=10, color=COLOR_BLUE_DARK), textposition='top center')
-        fig_inactive.update_layout(**CHART_LAYOUT, margin=dict(l=0, r=0, t=10, b=0),
-                                    yaxis_title="Taux d'attrition (%)", height=280)
-        st.plotly_chart(fig_inactive, use_container_width=True, config={'displayModeBar': False})
+    with meta_col:
+        st.markdown(f"<p class='ed-meta'>Base : {len(df):,} clients · source Kaggle BankChurners</p>", unsafe_allow_html=True)
+
+    st.markdown("<div class='ed-rule'></div>", unsafe_allow_html=True)
+
+    spend_m = df.loc[df["Gender"] == "M", "Total_Trans_Amt"]
+    spend_f = df.loc[df["Gender"] == "F", "Total_Trans_Amt"]
+    ct_m = df.loc[df["Gender"] == "M", "Total_Trans_Ct"]
+    ct_f = df.loc[df["Gender"] == "F", "Total_Trans_Ct"]
+    mean_f, mean_m = spend_f.mean(), spend_m.mean()
+    ecart_h1 = (mean_f - mean_m) / mean_m * 100
+    h1_femmes_plus = bool(mean_f > mean_m)
+    kpi_h1_val = f"{abs(ecart_h1):.0f}%"
+    kpi_h1_cap = "de dépenses en plus chez les femmes" if h1_femmes_plus else "de dépenses en plus chez les hommes"
+
+    h1_effet_faible = bool(abs(ecart_h1) < 10)
+
+    inact_att = df.loc[df["Attrition_Flag"] == "Attrited Customer", "Months_Inactive_12_mon"]
+    inact_exist = df.loc[df["Attrition_Flag"] == "Existing Customer", "Months_Inactive_12_mon"]
+    mean_att, mean_exist = inact_att.mean(), inact_exist.mean()
+    h2_att_plus_inactifs = bool(mean_att > mean_exist)
+    ratio_h2 = (mean_att / mean_exist) if h2_att_plus_inactifs else (mean_exist / mean_att)
+    kpi_h2_val = f"×{ratio_h2:.2f}"
+    kpi_h2_cap = "de mois d'inactivité en plus chez les partants" if h2_att_plus_inactifs else "de mois d'inactivité en plus chez les actifs"
+
+    inactive_grp = df.groupby("Months_Inactive_12_mon")["Attrition_Flag"]
+    churn_by_inactive = (inactive_grp.apply(lambda x: (x == "Attrited Customer").mean() * 100)).sort_index()
+
+    churn_by_contact = df.groupby("Contacts_Count_12_mon")["Attrition_Flag"].apply(
+        lambda x: (x == "Attrited Customer").mean() * 100
+    ).sort_index()
+
+    avg_contacts_active = df.loc[df["Attrition_Flag"] == "Existing Customer", "Contacts_Count_12_mon"].mean()
+    avg_contacts_churn = df.loc[df["Attrition_Flag"] == "Attrited Customer", "Contacts_Count_12_mon"].mean()
+    contacts_ratio = avg_contacts_churn / avg_contacts_active if avg_contacts_active > 0 else 0
+    kpi_h4_val = f"×{contacts_ratio:.2f}"
+    kpi_h4_cap = "plus de contacts (12 mois) chez les partants"
+
+    df_h3 = df.dropna(subset=["Age_Group"]).copy()
+    df_h3["Churn"] = (df_h3["Attrition_Flag"] == "Attrited Customer").astype(int)
+    churn_by_age = df_h3.groupby("Age_Group", observed=True)["Churn"].mean() * 100
+
+    plus_jeune_groupe = churn_by_age.index[0]
+    plus_jeune_taux = churn_by_age.iloc[0]
+    groupe_max_taux = churn_by_age.idxmax()
+    jeunes_ont_le_taux_max = bool(groupe_max_taux == plus_jeune_groupe)
+    kpi_h3_val = f"{plus_jeune_taux:.0f}%"
+    kpi_h3_cap = f"de départs chez les {plus_jeune_groupe} ans"
+
+    age_att = df_h3.loc[df_h3["Attrition_Flag"] == "Attrited Customer", "Customer_Age"]
+    age_exist = df_h3.loc[df_h3["Attrition_Flag"] == "Existing Customer", "Customer_Age"]
+    age_att_plus_ages = bool(age_att.mean() > age_exist.mean())
+
+    predictors = {
+        "Âge": "Customer_Age",
+        "Produits détenus": "Total_Relationship_Count",
+        "Mois inactifs": "Months_Inactive_12_mon",
+        "Contacts (12 mois)": "Contacts_Count_12_mon",
+        "Solde renouvelable": "Total_Revolving_Bal",
+        "Nb. transactions": "Total_Trans_Ct",
+    }
+    corr_labels, corr_values = [], []
+    for label, col in predictors.items():
+        r, _ = stats.pointbiserialr(df_h3["Churn"], df_h3[col])
+        corr_labels.append(label)
+        corr_values.append(abs(r))
+    corr_order = sorted(range(len(corr_values)), key=lambda i: corr_values[i])
+    corr_labels = [corr_labels[i] for i in corr_order]
+    corr_values = [corr_values[i] for i in corr_order]
+    age_rank_last = corr_labels[0] == "Âge"
+
+    k1, k2, k3, k4 = st.columns(4)
+    with k1:
+        kpi_card(kpi_h1_val, kpi_h1_cap)
+    with k2:
+        kpi_card(kpi_h2_val, kpi_h2_cap)
+    with k3:
+        kpi_card(kpi_h3_val, kpi_h3_cap)
+    with k4:
+        kpi_card(kpi_h4_val, kpi_h4_cap)
+
+    st.markdown("<div class='ed-divider'></div>", unsafe_allow_html=True)
+
+    titre_h1a = "Les femmes dépensent plus que les hommes" if h1_femmes_plus else "Les hommes dépensent plus que les femmes"
+    titre_h1b = "Elles réalisent aussi plus de transactions" if ct_f.mean() > ct_m.mean() else "Ils réalisent aussi plus de transactions"
+
+    c1, c2 = st.columns(2)
+    with c1:
+        with card("Hypothèse H1", "« Les femmes dépensent plus »"):
+            card_chart_header(titre_h1a, "Montant total moyen des transactions ($)")
+            fig = hbar2(["Femme", "Homme"], [mean_f, mean_m], highlight_first=h1_femmes_plus, value_fmt="${:,.0f}")
+            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+    with c2:
+        with card():
+            card_chart_header(titre_h1b, "Nombre moyen de transactions")
+            fig2 = dumbbell("Femme", ct_f.mean(), "Homme", ct_m.mean(), value_fmt="{:.1f}")
+            st.plotly_chart(fig2, use_container_width=True, config={'displayModeBar': False})
+
+    titre_h1c = "Un écart statistiquement significatif, mais ténu à l'œil nu" if h1_effet_faible else "Un écart net, visible à l'œil nu"
+    with card():
+        card_chart_header(titre_h1c, "Densité de clients par montant de transactions (courbes lissées)")
+        fig3 = density_curve(spend_f, spend_m, "Femme", "Homme", x_title="Montant total des transactions ($)")
+        st.plotly_chart(fig3, use_container_width=True, config={'displayModeBar': False})
+
+    st.markdown("<div class='ed-divider'></div>", unsafe_allow_html=True)
+
+    titre_h2a = "Les clients partis étaient inactifs plus longtemps" if h2_att_plus_inactifs else "Les clients partis étaient en réalité plus actifs"
+
+    c1, c2 = st.columns(2)
+    with c1:
+        with card("Hypothèse H2", "« L'inactivité prolongée précède le départ »"):
+            card_chart_header(titre_h2a, "Mois d'inactivité moyens (sur 12 mois)")
+            fig = bar2(["Partants", "Actifs"], [mean_att, mean_exist], highlight_first=h2_att_plus_inactifs, value_fmt="{:.2f}")
+            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+    with c2:
+        with card():
+            card_chart_header("L'inactivité, un signal précoce du départ", "Taux d'attrition (%) par mois inactifs")
+            fig2 = signal_line(churn_by_inactive.index.astype(str), churn_by_inactive.values)
+            st.plotly_chart(fig2, use_container_width=True, config={'displayModeBar': False})
+
+    with card():
+        card_chart_header("Plus ils contactent, plus ils partent", "Taux d'attrition (%) selon le nombre de contacts")
+        fig3 = contact_hbar(churn_by_contact.index.tolist(), churn_by_contact.values.tolist())
+        st.plotly_chart(fig3, use_container_width=True, config={'displayModeBar': False})
+
+    st.markdown("<div class='ed-divider'></div>", unsafe_allow_html=True)
+
+    titre_h3a = f"Les {plus_jeune_groupe} ans partent le plus" if jeunes_ont_le_taux_max else f"Les {groupe_max_taux} ans partent le plus, pas les plus jeunes"
+    titre_h3b = "Les clients partis sont en moyenne plus âgés" if age_att_plus_ages else "Les clients partis sont en moyenne plus jeunes"
+
+    c1, c2 = st.columns(2)
+    with c1:
+        with card("Hypothèse H3", "« Le changement de banque touche surtout les jeunes »"):
+            card_chart_header(titre_h3a, "Taux de départ (%) par tranche d'âge, classé")
+            churn_sorted = churn_by_age.sort_values(ascending=False)
+            fig = ranked_lollipop(churn_sorted.index.tolist(), churn_sorted.values.tolist())
+            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+    with c2:
+        with card():
+            card_chart_header(titre_h3b, "Âge individuel, partants vs actifs")
+            fig2 = age_strip(age_att, age_exist, "Partants", "Actifs", y_title="Âge")
+            st.plotly_chart(fig2, use_container_width=True, config={'displayModeBar': False})
+
+    titre_h3c = ("L'âge est le plus mauvais prédicteur du départ" if age_rank_last
+                 else f"{corr_labels[0]} est le plus mauvais prédicteur du départ, l'âge fait mieux")
+    with card():
+        card_chart_header(titre_h3c, "Corrélation absolue avec le départ, par variable")
+        fig3 = predictor_hbar(corr_labels, corr_values)
+        st.plotly_chart(fig3, use_container_width=True, config={'displayModeBar': False})
+
+
+df = load_data()
+render_hypotheses(df)
