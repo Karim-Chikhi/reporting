@@ -34,8 +34,8 @@ def lerp_color(c1, c2, t):
     return f'rgb({r[0]},{r[1]},{r[2]})'
 
 
-ACCENT = '#E2001A'
-ACCENT_SOFT = '#FF4D5E'
+ACCENT = '#0E8A5F'
+ACCENT_SOFT = '#34D399'
 NEUTRAL_GREY = '#d9d9d9'
 NEUTRAL_GREY_DARK = '#3d3d3d'
 ED_TEXT_DARK = '#0a0a0a'
@@ -57,7 +57,7 @@ def inject_editorial_css():
 
         html, body { height: 100%; overflow: hidden !important; }
         .stApp {
-            background-color: #0a0a0a;
+            background-color: #08251C;
             height: 100vh;
             overflow: hidden;
         }
@@ -69,14 +69,14 @@ def inject_editorial_css():
         }
 
         section[data-testid="stSidebar"] {
-            background-color: #0a0a0a;
-            border-right: 1px solid #262626;
+            background-color: #08251C;
+            border-right: 1px solid #10402F;
         }
         section[data-testid="stSidebar"] * {
             color: #e5e5e5 !important;
         }
         section[data-testid="stSidebar"] [aria-selected="true"] {
-            background-color: rgba(226,0,26,0.18) !important;
+            background-color: rgba(52,211,153,0.18) !important;
         }
 
         .block-container,
@@ -115,13 +115,13 @@ def inject_editorial_css():
             margin: 0 0 1px 0 !important;
         }
         .ed-subtitle {
-            color: #b3b3b3 !important;
+            color: #A8C6B8 !important;
             font-size: 0.72rem !important;
             line-height: 1.3 !important;
             margin: 0 0 6px 0 !important;
         }
         .ed-meta {
-            color: #808080 !important;
+            color: #7C9A8B !important;
             font-size: 0.62rem !important;
             line-height: 1.3 !important;
             text-align: right;
@@ -129,27 +129,27 @@ def inject_editorial_css():
         }
         .ed-rule {
             height: 3px;
-            background-color: #E2001A;
+            background-color: #34D399;
             border-radius: 2px;
             margin: 2px 0 8px 0;
         }
         .ed-divider {
             height: 1px;
-            background-color: #262626;
+            background-color: #10402F;
             margin: 2px 0 4px 0;
         }
 
         .kpi-card {
             background-color: #ffffff;
             border: 1px solid #e7e5e4;
-            border-top: 3px solid #E2001A;
+            border-top: 3px solid #0E8A5F;
             border-radius: 8px;
             padding: 8px 10px;
             text-align: center;
             box-shadow: 0 1px 2px rgba(0,0,0,0.03), 0 6px 16px rgba(17,24,39,0.04);
         }
         .kpi-value {
-            color: #E2001A;
+            color: #0E8A5F;
             font-size: 1.25rem;
             font-weight: 800;
             line-height: 1.15;
@@ -169,7 +169,7 @@ def inject_editorial_css():
             box-shadow: 0 1px 2px rgba(0,0,0,0.03), 0 8px 20px rgba(17,24,39,0.045);
         }
         .ed-kicker {
-            color: #E2001A !important;
+            color: #0E8A5F !important;
             font-size: 0.65rem !important;
             line-height: 1.3 !important;
             font-weight: 700;
@@ -197,7 +197,7 @@ def inject_editorial_css():
             width: 11px;
             height: 2px;
             border-radius: 2px;
-            background-color: #E2001A;
+            background-color: #0E8A5F;
             margin-right: 6px;
             margin-bottom: 2px;
         }
@@ -208,13 +208,13 @@ def inject_editorial_css():
             margin-bottom: 2px !important;
         }
         .ed-verdict {
-            color: #b3b3b3 !important;
+            color: #A8C6B8 !important;
             font-size: 0.7rem !important;
             line-height: 1.3 !important;
             padding: 4px 2px 22px 2px;
         }
         .ed-verdict b { color: #ffffff; }
-        .ed-verdict .accent { color: #E2001A; }
+        .ed-verdict .accent { color: #34D399; }
     </style>
     """, unsafe_allow_html=True)
 
