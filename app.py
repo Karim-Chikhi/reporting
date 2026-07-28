@@ -9,9 +9,9 @@ st.set_page_config(page_title="Validation des hypothèses — BankChurners", lay
 @st.cache_data
 def load_data():
     try:
-        df = pd.read_csv("BankChurners.csv")
+        df = pd.read_csv("data/BankChurners.csv")
     except FileNotFoundError:
-        st.error("Fichier 'BankChurners.csv' introuvable. Veuillez vous assurer qu'il est dans le même dossier.")
+        st.error("Fichier 'data/BankChurners.csv' introuvable. Veuillez vous assurer qu'il est dans le dossier 'data'.")
         st.stop()
 
     cols_to_drop = ['CLIENTNUM']
@@ -89,8 +89,8 @@ def inject_editorial_css():
             max-width: 1650px;
         }
         div[data-testid="stAppViewContainer"] { padding-top: 0 !important; }
-        div[data-testid="stVerticalBlock"] { gap: 0.3rem !important; }
-        div[data-testid="stVerticalBlockBorderWrapper"] { gap: 0.3rem !important; }
+        div[data-testid="stVerticalBlock"] { gap: 1rem !important; }
+        div[data-testid="stVerticalBlockBorderWrapper"] { gap: 1rem !important; }
         div[data-testid="stElementContainer"],
         div[data-testid="stElementContainer"] > div,
         div[data-testid="stMarkdown"],
@@ -203,7 +203,7 @@ def inject_editorial_css():
         }
         .ed-card-subtitle {
             color: #6b7280 !important;
-            font-size: 0.6rem !important;
+            font-size: 0.56rem !important;
             line-height: 1.3 !important;
             margin-bottom: 2px !important;
         }
@@ -369,21 +369,8 @@ def inject_autoscale_js():
     components.html(
         """
         <script>
-        function fixHeaderHeights() {
-            const doc = window.parent.document;
-            const containers = doc.querySelectorAll('[data-testid="stElementContainer"]');
-            containers.forEach(c => {
-                if (c.querySelector('.ed-card-title, .ed-card-subtitle, .kpi-value, .kpi-caption, .ed-title, .ed-subtitle, .ed-meta')) {
-                    const child = c.firstElementChild;
-                    if (child && child.scrollHeight > 0) {
-                        c.style.setProperty('height', child.scrollHeight + 'px', 'important');
-                    }
-                }
-            });
-        }
         function fitSlide() {
             try {
-                fixHeaderHeights();
                 const el = window.parent.document.querySelector('.block-container');
                 if (!el) return;
                 el.style.transform = 'none';
@@ -394,12 +381,8 @@ def inject_autoscale_js():
                 el.style.transform = 'scale(' + scale + ')';
             } catch (e) {}
         }
-        fitSlide();
         window.parent.addEventListener('resize', fitSlide);
-        setTimeout(fitSlide, 150);
-        setTimeout(fitSlide, 500);
-        setTimeout(fitSlide, 1200);
-        setInterval(fixHeaderHeights, 400);
+        setTimeout(fitSlide, 1800);
         </script>
         """,
         height=0,
@@ -419,9 +402,9 @@ def render_hypotheses(df):
 
     head_col, meta_col = st.columns([3, 1])
     with head_col:
-        st.markdown("<h1 class='ed-title'>Le vrai visage des hypothèses</h1>", unsafe_allow_html=True)
+        st.markdown("<h1 class='ed-title'>Cartes de crédit : comportement des clients sur 12 mois</h1>", unsafe_allow_html=True)
         st.markdown(
-            "<p class='ed-subtitle'>Genre, inactivité et âge — ce que les données du portefeuille cartes de crédit confirment vraiment</p>",
+            "<p class='ed-subtitle'>Qui dépense, qui s'éloigne, qui part</p>",
             unsafe_allow_html=True,
         )
     with meta_col:
@@ -470,8 +453,6 @@ def render_hypotheses(df):
 
     plus_jeune_groupe = churn_by_age.index[0]
     plus_jeune_taux = churn_by_age.iloc[0]
-    groupe_max_taux = churn_by_age.idxmax()
-    jeunes_ont_le_taux_max = bool(groupe_max_taux == plus_jeune_groupe)
     kpi_h3_val = f"{plus_jeune_taux:.0f}%"
     kpi_h3_cap = f"de départs chez les {plus_jeune_groupe} ans"
 
@@ -491,7 +472,6 @@ def render_hypotheses(df):
     corr_order = sorted(range(len(corr_values)), key=lambda i: corr_values[i])
     corr_labels = [corr_labels[i] for i in corr_order]
     corr_values = [corr_values[i] for i in corr_order]
-    age_rank_last = corr_labels[0] == "Âge"
 
     k1, k2, k3, k4 = st.columns(4)
     with k1:
@@ -505,19 +485,17 @@ def render_hypotheses(df):
 
     st.markdown("<div class='ed-divider'></div>", unsafe_allow_html=True)
 
-    titre_h1a = "Les femmes dépensent plus que les hommes" if h1_femmes_plus else "Les hommes dépensent plus que les femmes"
-    titre_h1b = "Elles réalisent aussi plus de transactions" if ct_f.mean() > ct_m.mean() else "Ils réalisent aussi plus de transactions"
     ct_f_plus = bool(ct_f.mean() > ct_m.mean())
 
     c1, c2 = st.columns(2)
     with c1:
         with card():
-            card_chart_header(titre_h1a, "Montant total moyen des transactions ($)")
+            card_chart_header("Dépense moyenne par genre", "Montant total moyen des transactions, en dollars")
             fig = hbar2(["Femme", "Homme"], [mean_f, mean_m], highlight_first=h1_femmes_plus, value_fmt="${:,.0f}")
             st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
     with c2:
         with card():
-            card_chart_header(titre_h1b, "Nombre moyen de transactions")
+            card_chart_header("Nombre moyen de transactions par genre", "Nombre moyen de transactions sur 12 mois")
             fig2 = pie2(["Femme", "Homme"], [ct_f.mean(), ct_m.mean()], highlight_first=ct_f_plus, value_fmt="{:.1f}")
             st.plotly_chart(fig2, use_container_width=True, config={'displayModeBar': False})
 
@@ -526,31 +504,27 @@ def render_hypotheses(df):
     c1, c2 = st.columns(2)
     with c1:
         with card():
-            card_chart_header("L'inactivité, un signal précoce du départ", "Taux d'attrition (%) par mois inactifs")
+            card_chart_header("Taux d'attrition par mois d'inactivité", "Taux d'attrition (%) selon le nombre de mois inactifs sur 12 mois")
             fig = signal_line(churn_by_inactive.index.astype(str), churn_by_inactive.values)
             st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
     with c2:
         with card():
-            card_chart_header("Plus ils contactent, plus ils partent", "Taux d'attrition (%) selon le nombre de contacts")
+            card_chart_header("Taux d'attrition par nombre de contacts", "Taux d'attrition (%) selon le nombre de contacts sur 12 mois")
             fig2 = contact_hbar(churn_by_contact.index.tolist(), churn_by_contact.values.tolist())
             st.plotly_chart(fig2, use_container_width=True, config={'displayModeBar': False})
 
     st.markdown("<div class='ed-divider'></div>", unsafe_allow_html=True)
 
-    titre_h3a = f"Les {plus_jeune_groupe} ans partent le plus" if jeunes_ont_le_taux_max else f"Les {groupe_max_taux} ans partent le plus, pas les plus jeunes"
-    titre_h3c = ("L'âge est le plus mauvais prédicteur du départ" if age_rank_last
-                 else f"{corr_labels[0]} est le plus mauvais prédicteur du départ, l'âge fait mieux")
-
     c1, c2 = st.columns(2)
     with c1:
         with card():
-            card_chart_header(titre_h3a, "Taux de départ (%) par tranche d'âge, classé")
+            card_chart_header("Taux de départ par tranche d'âge", "Taux de départ (%) par tranche d'âge, classé du plus élevé au plus faible")
             churn_sorted = churn_by_age.sort_values(ascending=False)
             fig = ranked_lollipop(churn_sorted.index.tolist(), churn_sorted.values.tolist())
             st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
     with c2:
         with card():
-            card_chart_header(titre_h3c, "Corrélation absolue avec le départ, par variable")
+            card_chart_header("Corrélation entre variables comportementales et départ", "Corrélation absolue (point-bisérielle) avec le départ, par variable")
             fig2 = predictor_hbar(corr_labels, corr_values)
             st.plotly_chart(fig2, use_container_width=True, config={'displayModeBar': False})
 

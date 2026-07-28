@@ -1,0 +1,4 @@
+Profil_Depensier,Nb_clients,Taux_churn_%,Total_Trans_Amt,Total_Trans_Ct,Total_Revolving_Bal,Avg_Utilization_Ratio
+Petit dépensier,3806,34.8,1943.4,40.1,1138.7,0.3
+Moyen dépensier,5545,5.4,4682.3,75.5,1150.2,0.3
+Grand dépensier,776,0.1,14484.9,110.2,1371.6,0.2
